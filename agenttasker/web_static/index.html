@@ -192,10 +192,16 @@ function visibleTasks() {
     const id = parseInt(QUERY.slice(1), 10);
     return Number.isInteger(id) ? TASKS.filter(t => t.id === id) : [];
   }
+  if (QUERY.startsWith("⎇")) {  // "⎇branch" or "⎇branch*" — branch filter
+    const pat = QUERY.slice(1).trim().replace(/\*/g, ".*").toLowerCase();
+    const re = new RegExp(`^${pat}$`);
+    return TASKS.filter(t => re.test((t.branch || "").toLowerCase()));
+  }
   const q = QUERY.toLowerCase();
   return TASKS.filter(t =>
     (t.name || "").toLowerCase().includes(q) ||
-    (t.description || "").toLowerCase().includes(q));
+    (t.description || "").toLowerCase().includes(q) ||
+    (t.branch || "").toLowerCase().includes(q));
 }
 function note(text, isErr) {
   const el = $("#msg"); el.textContent = text || "";
@@ -257,7 +263,6 @@ function renderList(main) {
     ${rows.map(t => `<tr class="row ${t.status === "done" ? "done" : ""}" data-id="${t.id}">
       <td>${t.id}</td><td>${esc(t.name)}</td><td>${statusLabel(t.status)}</td>
       <td class="pri${t.priority}">${priLabel(t.priority)}</td><td>${esc(t.type)}</td>
-      <td>${esc(blockedBy(t))}</td><td>${t.owner ? "@" + esc(t.owner) : "—"}</td>
       <td>${esc((t.created_at || "").slice(0, 10))}</td></tr>`).join("")}
   </table></div>`;
 }
@@ -357,11 +362,14 @@ function openTask(id) {
         <select id="f_priority">${opt(CFG.priorities.map((_, i) => i), t.priority, priLabel)}</select></div>
       <div><div class="fieldhead"><label>Type</label></div>
         <select id="f_type">${opt(CFG.types, t.type)}</select></div>
+      ${fld("branch", "Branch", t.branch, `<input id="f_branch" value="${esc(t.branch)}" placeholder="git branch">`)}
       <div><div class="fieldhead"><label>Owner</label></div>
         <div class="static">${ownerBits}</div>
         <div style="display:flex;gap:8px;margin-top:4px">
           <button class="mini" data-act="claim">claim</button>
           <button class="mini" data-act="release">release</button></div></div>
+      ${t.parent_id ? `<div><div class="fieldhead"><label>Part of story</label></div>
+        <div class="static" data-id="${t.parent_id}" style="cursor:pointer;color:var(--accent)">#${t.parent_id}</div></div>` : ""}
       ${fld("tags", "Tags", t.tags.join(", "), `<input id="f_tags" value="${esc(t.tags.join(", "))}" placeholder="comma-separated">`)}
       ${fld("depends_on", "Depends on", t.depends_on.map(i => "#" + i).join(", "),
             `<input id="f_deps" value="${t.depends_on.map(i => "#" + i).join(", ")}" placeholder="#1, #4">`)}
@@ -369,13 +377,13 @@ function openTask(id) {
             `<input id="f_affects" value="${t.affects.map(i => "#" + i).join(", ")}" placeholder="#2">`)}
       ${fld("blockers", "Blockers", t.blockers.join(", "),
             `<input id="f_blockers" value="${esc(t.blockers.join(", "))}" placeholder="comma-separated">`)}
-      ${fld("branch", "Branch", t.branch, `<input id="f_branch" value="${esc(t.branch)}" placeholder="git branch">`)}
+    </div>
     <div class="trio">
       ${(t.children?.length) ? `
       <div class="pane">
         <div class="fieldhead"><label>Sub-tasks (${t.story_progress} done)</label></div>
         <div class="content">${t.children.map(c =>
-          `<div class="ev"><span class="evkind">#${c.id}</span>` +
+          `<div class="ev" data-id="${c.id}" style="cursor:pointer"><span class="evkind">#${c.id}</span>` +
           `<span style="flex:1;${c.status === "done" ? "color:var(--dim)" : ""}">${esc(c.name)}</span>` +
           `<span class="evts">${statusLabel(c.status)}</span></div>`).join("")}</div>
       </div>` : `
@@ -422,6 +430,10 @@ function openTask(id) {
   const base = `/api/tasks/${encodeURIComponent(t.project)}/${t.id}`;
   $("#overlay .modal").addEventListener("click", async (e) => {
     const act = e.target.dataset?.act;
+    // sub-task rows and "Part of story" links navigate to that task
+    if (!act && e.target.closest("[data-id]") && e.target.closest(".ev, .static")) {
+      close(); openTask(+e.target.closest("[data-id]").dataset.id); return;
+    }
     if (!act) return;
     try {
       if (act === "close") close();
@@ -513,6 +525,7 @@ function openNew() {
      <div class="frow"><label>Description</label><textarea id="n_desc"></textarea></div>
      <div class="frow"><label>Tags</label><input id="n_tags" placeholder="comma-separated"></div>
      <div class="frow"><label>Story</label><input id="n_story" placeholder="#story id (optional)"></div>
+     <div class="frow"><label>Branch</label><input id="n_branch" placeholder="git branch (optional)"></div>
      <div class="frow"><label>Depends on</label><input id="n_deps" placeholder="#1, #4"></div>`,
     `<button class="primary" data-act="create">Create</button>
      <button data-act="close">Cancel</button>`);
@@ -525,6 +538,7 @@ function openNew() {
         description: $("#n_desc").value,
         tags: $("#n_tags").value.split(",").map(s => s.trim()).filter(Boolean),
         parent: $("#n_story").value.trim() || null,
+        branch: $("#n_branch").value.trim() || "",
         depends_on: $("#n_deps").value.split(",").map(s => s.trim()).filter(Boolean),
       }});
     } catch (err) { note(err.message, true); }
