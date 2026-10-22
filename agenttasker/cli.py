@@ -141,6 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="filter by priority; repeatable, comma-separated")
     p.add_argument("--tag", action="append", metavar="TAG", help="filter by tag/workstream")
     p.add_argument("--story", metavar="REF", help="only sub-tasks of this story")
+    p.add_argument("--stories", action="store_true", help="only stories (tasks with sub-tasks)")
     p.add_argument("--branch", metavar="NAME", help="filter by git branch (supports * wildcards)")
     p.add_argument("--stale", nargs="?", const=24, metavar="HOURS", type=float,
                    help="only claims older than HOURS (default 24)")
