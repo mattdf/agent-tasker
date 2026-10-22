@@ -394,6 +394,82 @@ class StoryTest(unittest.TestCase):
         self.assertEqual([t.name for t in self.store.list_tasks("p", stories_only=True)], ["story"])
 
 
+class StoryShowTest(unittest.TestCase):
+    """story show must resolve dependencies across the whole project, not just
+    the story's children (regression: external done deps showed as blocking)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.tmp.name) / "tasks.db")
+        self.addCleanup(self.tmp.cleanup)
+        self.addCleanup(self.store.close)
+        # an unrelated done task in ANOTHER project with the same id as our dep
+        self.store.add_task("other", "decoy", status="done")  # gets id 1
+        # real project: external done dep with no story, external done dep in
+        # another story, external unfinished dep, plus the story under test
+        self.store.add_task("p", "ext done no story", status="done")       # id 1
+        self.store.add_task("p", "other story parent")                     # id 2
+        self.store.add_task("p", "ext done other story", parent=2, status="done")  # id 3
+        self.store.add_task("p", "ext unfinished", status="todo")          # id 4
+        self.story = self.store.add_task("p", "the story")                  # id 5
+
+    def _add_child(self, name, *, deps=(), status="backlog"):
+        return self.store.add_task("p", name, parent=self.story.id,
+                                   depends_on=list(deps), status=status)
+
+    def test_story_show_dep_resolution(self):
+        import contextlib, io
+        from agenttasker.cli import cmd_story_show
+        from argparse import Namespace
+
+        # child A: deps all done externally (no story + other story) -> ready
+        a = self._add_child("child A", deps=[1, 3])
+        # child B: dep on unfinished external -> blocked
+        b = self._add_child("child B", deps=[4])
+        # child D: dep on genuinely missing id 999 — insert via SQL since the
+        # normal API validates refs on creation
+        d = self.store.add_task("p", "child D", parent=self.story.id)
+        self.store.db.execute(
+            "UPDATE tasks SET depends_on='[999]' WHERE project='p' AND id=?",
+            (d.id,),
+        )
+        self.store.db.commit()
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cmd_story_show(
+                Namespace(project="p", ref=str(self.story.id)), self.store)
+        out = buf.getvalue()
+
+
+        self.assertIn("ready", out)          # child A ready (ext deps done)
+        # child A must NOT show blocked — verified per-line below
+        self.assertIn("blocked", out)        # B, C, D genuinely blocked
+
+        # per-line checks
+        for line in out.splitlines():
+            if "child A" in line:
+                self.assertIn("ready", line)
+                self.assertNotIn("blocked", line)
+            if "child B" in line:
+                self.assertIn("blocked", line)
+            if "child C" in line:
+                self.assertIn("blocked", line)
+            if "child D" in line:
+                self.assertIn("blocked", line)
+
+    def test_other_project_same_ids_do_not_leak(self):
+        """A done task with id 1 in project 'other' must not make child A's
+        dep on project-p id 1 look done via cross-project confusion."""
+        self._add_child("child A", deps=[1])  # dep on p#1 (done, no story)
+        # if the fix ever used a global map, p#1=done would still be correct;
+        # but verify the store's per-project lookup agrees
+        child = self.store.children(self.story)[0]
+        deps = self.store.dep_statuses(child)
+        self.assertEqual(deps, {1: "done"})  # from project p, not 'other'
+
+
+
 class BranchTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

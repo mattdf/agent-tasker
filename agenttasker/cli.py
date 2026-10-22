@@ -496,7 +496,7 @@ def cmd_story_show(args, store: Store) -> int:
         return 0
     done = sum(1 for c in children if c.status == DONE)
     print(f"{display_ref(project, story.id)}  {story.name}  —  {done}/{len(children)} done")
-    dep_map = {c.id: c.status for c in children}
+    dep_map = {t.id: t.status for t in store.list_tasks(project)}  # full project, not just children
     for c in children:
         flags = []
         if c.status != DONE and is_blocked(c, dep_map):
