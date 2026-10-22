@@ -205,7 +205,7 @@ def build_handler(store_path: Path | None, default_project: str | None):
                 task = store.add_task(
                     project,
                     body.get("name", ""),
-                    description=body.get("description", ""),
+                    branch=body.get("branch", ""),
                     status=body.get("status", "backlog"),
                     evidence=body.get("evidence", ""),
                     priority=body.get("priority", DEFAULT_PRIORITY),
@@ -243,6 +243,8 @@ def build_handler(store_path: Path | None, default_project: str | None):
                             changes[key] = body[key]
                     if "parent" in body and body["parent"] is not None:
                         changes["parent"] = body["parent"]
+                    if "branch" in body and body["branch"] is not None:
+                        changes["branch"] = body["branch"]
                     for key in ("blockers", "tags"):
                         if key in body and body[key] is not None:
                             changes[key] = body[key]

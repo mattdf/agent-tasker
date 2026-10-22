@@ -369,7 +369,7 @@ function openTask(id) {
             `<input id="f_affects" value="${t.affects.map(i => "#" + i).join(", ")}" placeholder="#2">`)}
       ${fld("blockers", "Blockers", t.blockers.join(", "),
             `<input id="f_blockers" value="${esc(t.blockers.join(", "))}" placeholder="comma-separated">`)}
-    </div>
+      ${fld("branch", "Branch", t.branch, `<input id="f_branch" value="${esc(t.branch)}" placeholder="git branch">`)}
     <div class="trio">
       ${(t.children?.length) ? `
       <div class="pane">
@@ -495,6 +495,7 @@ async function save(t) {
     body.blockers = blockers.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
   const deps = val("#f_deps"); if (deps !== null) body.depends_on = deps.split(",").map(s => s.trim()).filter(Boolean);
   const aff = val("#f_affects"); if (aff !== null) body.affects = aff.split(",").map(s => s.trim()).filter(Boolean);
+  const branch = val("#f_branch"); if (branch !== null) body.branch = branch.trim();
   await api(`/api/tasks/${encodeURIComponent(t.project)}/${t.id}`, {method: "PATCH", body});
   await reload(); note("saved"); EDIT.clear(); close();
 }

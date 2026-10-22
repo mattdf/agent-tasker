@@ -695,7 +695,7 @@ class Board:
             block("status", "STATUS", [(status_label(task.status), status_attr)]),
             block("priority", "PRIORITY", [(priority_label(task.priority), bold)]),
             block("type", "TYPE", [(task.type, bold)]),
-            block(None, "PROJECT", [(task.project, dim)]),
+            block("branch", "BRANCH", [(task.branch or "(none)", dim)]),
             block(None, "OWNER", [(owner_text, alert if task.owner else dim)]),
             block("description", "DESCRIPTION",
                   [("─", 0)] + [(l, 0) for l in (task.description.splitlines() or ["(none)"])]),
@@ -762,6 +762,11 @@ class Board:
             if value is None:
                 return None
             return self.store.update(task, tags=[t for t in value.split(",") if t.strip()])
+        if key == "branch":
+            value = self._input_box(stdscr, "Git branch", task.branch)
+            if value is None:
+                return None
+            return self.store.update(task, branch=value.strip())
         if key == "blockers":
             text = self._edit_in_editor("\n".join(task.blockers))
             if text is None:

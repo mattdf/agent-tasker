@@ -79,8 +79,20 @@ agenttasker rm 1 --force            # delete a story (children are detached, not
 
 Stories are plain tasks (full fields, claimable, evidence, events) with derived
 progress (`done/total`). Single level — a sub-task can't be a story's parent.
-The TUI shows a SUB-TASKS block in the detail view; the web modal swaps the
-description pane for a sub-tasks checklist on stories.
+
+## Git branches
+
+Tag tasks with the branch they're worked on; filter by exact name or `*` wildcards:
+
+```bash
+agenttasker add "Fix login" --branch feature/auth-fix
+agenttasker ls --branch feature/auth-fix    # exact match
+agenttasker ls --branch 'feature/*'         # wildcard
+agenttasker update 3 --branch hotfix/crash  # re-tag
+```
+
+Branches show in `ls` output (⎇ prefix), `show`, and the web/TUI detail views.
+
 
 Tasks are namespaced per **project**: the git repo name (or cwd name outside a repo),
 overridable with `--project`/`-p` or `$AGENTTASKER_PROJECT`. References accept `12`

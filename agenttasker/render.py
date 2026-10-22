@@ -51,6 +51,8 @@ def task_line(task: Task, by_id: dict[int, Task], show_project: bool = False) ->
         flags.append(priority_label(task.priority))
     if task.type != DEFAULT_TYPE:
         flags.append(task.type)
+    if task.branch:
+        flags.append(f"⎇{task.branch}")
     owner = _owner_flag(task)
     if owner:
         flags.append(owner)
@@ -75,7 +77,7 @@ def detail(task: Task, by_id: dict[int, Task], attachments: list | None = None,
         f"Status:   {status_label(task.status)}",
         f"Priority: {priority_label(task.priority)}",
         f"Type:     {task.type}",
-        f"Tags:     {', '.join(task.tags) if task.tags else '(none)'}",
+        f"Branch:   {task.branch or '—'}",
     ]
     owner = _owner_flag(task)
     lines.append(f"Owner:    {owner if owner else 'unclaimed'}")

@@ -394,6 +394,35 @@ class StoryTest(unittest.TestCase):
         self.assertEqual([t.name for t in self.store.list_tasks("p", stories_only=True)], ["story"])
 
 
+class BranchTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.tmp.name) / "tasks.db")
+        self.addCleanup(self.tmp.cleanup)
+        self.addCleanup(self.store.close)
+
+    def test_branch_lifecycle(self):
+        t = self.store.add_task("p", "fix", branch="feature/fix-login")
+        self.assertEqual(t.branch, "feature/fix-login")
+        updated = self.store.update(t, branch="hotfix")
+        self.assertEqual(updated.branch, "hotfix")
+        cleared = self.store.update(updated, branch="")
+        self.assertEqual(cleared.branch, "")
+
+    def test_branch_filter(self):
+        self.store.add_task("p", "one", branch="main")
+        self.store.add_task("p", "two", branch="feature/auth")
+        self.store.add_task("p", "three")  # no branch
+        self.assertEqual([t.name for t in self.store.list_tasks("p", branch="main")], ["one"])
+        self.assertEqual([t.name for t in self.store.list_tasks("p", branch="feature/auth")], ["two"])
+        self.assertEqual([t.name for t in self.store.list_tasks("p", branch="")], ["three"])
+        # wildcards
+        self.assertEqual(sorted(t.name for t in self.store.list_tasks("p", branch="feature/*")),
+                         ["two"])
+
+
+
+
 
 
 

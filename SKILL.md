@@ -90,7 +90,8 @@ agenttasker story add "Feature" [-d DESC]  # create a story (holds sub-tasks)
 agenttasker story show REF                 # checklist: sub-tasks, done/total progress
 agenttasker add "Name" --story REF         # sub-task of a story
 agenttasker ls [--story REF] [--stories]   # filter by story / only stories
-agenttasker rm REF [--force]               # stories need --force (children detach)
+agenttasker add "Name" --branch BRANCH         # tag with a git branch
+agenttasker ls [--branch BRANCH]               # filter by branch (supports * wildcards)
 agenttasker move REF (--to STATUS | --next | --prev)
 agenttasker done REF
 agenttasker attach REF FILE [--name NAME]        # any binary; sha256-addressed on disk

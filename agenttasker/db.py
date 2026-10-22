@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     priority    INTEGER NOT NULL DEFAULT 2,   -- 0=P0 (highest) .. 3=P3
     type        TEXT NOT NULL DEFAULT 'task', -- task|feature|bugfix|improvement|chore
     tags        TEXT NOT NULL DEFAULT '[]',   -- JSON array of strings (workstream/labels)
+    branch      TEXT NOT NULL DEFAULT '',     -- git branch this task is being worked on
     parent_id   INTEGER NOT NULL DEFAULT 0,   -- story this task belongs to (0 = none)
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
@@ -75,6 +76,7 @@ _MIGRATIONS = (
     ("tasks", "tags", "TEXT NOT NULL DEFAULT '[]'"),
     ("tasks", "type", "TEXT NOT NULL DEFAULT 'task'"),
     ("tasks", "parent_id", "INTEGER NOT NULL DEFAULT 0"),
+    ("tasks", "branch", "TEXT NOT NULL DEFAULT ''"),
 )
 
 _TS_MARK = re.compile(r"^\[([0-9]{4}-[0-9]{2}-[0-9]{2}T[^\]]+)\]\s?")
@@ -169,12 +171,20 @@ def connect(path: str | Path) -> sqlite3.Connection:
     fresh = len(conn.execute("PRAGMA table_info(tasks)").fetchall()) == 0
     conn.executescript(SCHEMA)
     if not fresh:
+        # add missing columns BEFORE the layout migration so the legacy
+        # table has everything the copy needs
+        existing = _columns(conn, "tasks")
+        for table, column, decl in _MIGRATIONS:
+            if column not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+        conn.commit()
         _migrate_evidence_blob(conn)
         if _pk_columns(conn, "tasks") == ["id"]:
             _migrate_legacy_layout(conn)  # legacy layout: composite pk, ids preserved
-    existing = _columns(conn, "tasks")
-    for table, column, decl in _MIGRATIONS:
-        if column not in existing:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+    else:
+        existing = _columns(conn, "tasks")
+        for table, column, decl in _MIGRATIONS:
+            if column not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
     conn.commit()
     return conn

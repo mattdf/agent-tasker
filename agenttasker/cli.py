@@ -121,6 +121,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="make this a sub-task of the given story (id or PROJECT-id)",
     )
     p.add_argument(
+        "--branch", metavar="NAME",
+        help="git branch this work happens on",
+    )
+    p.add_argument(
         "--affects", action="append", metavar="REF",
         help="task whose outcome this work affects; repeatable, comma-separated ok",
     )
@@ -137,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="filter by priority; repeatable, comma-separated")
     p.add_argument("--tag", action="append", metavar="TAG", help="filter by tag/workstream")
     p.add_argument("--story", metavar="REF", help="only sub-tasks of this story")
-    p.add_argument("--stories", action="store_true", help="only stories (tasks with sub-tasks)")
+    p.add_argument("--branch", metavar="NAME", help="filter by git branch (supports * wildcards)")
     p.add_argument("--stale", nargs="?", const=24, metavar="HOURS", type=float,
                    help="only claims older than HOURS (default 24)")
     p.add_argument("--json", action="store_true", help="machine-readable output")
@@ -184,6 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--affects", action="append", metavar="REF",
                    help="affects refs (replaces list; repeatable; '' clears)")
     p.add_argument("--priority", metavar="P0-P3", help="new priority (P0 highest .. P3)")
+    p.add_argument("--branch", metavar="NAME", help="git branch ('' clears)")
     p.add_argument("--type", metavar="TYPE", help="new type: task|feature|bugfix|improvement|chore")
     p.add_argument("--tag", action="append", metavar="TAG",
                    help="tags/workstreams (replaces list; repeatable; '' clears)")
@@ -303,6 +308,7 @@ def cmd_add(args, store: Store) -> int:
         type=args.type,
         tags=parse_tags(args.tag or []),
         parent=getattr(args, "story", None),
+        branch=getattr(args, "branch", "") or "",
     )
     print(f"Added {display_ref(project, task.id)} [{task.status}] {task.name}")
     return 0
@@ -322,6 +328,7 @@ def cmd_ls(args, store: Store) -> int:
         stale_hours=args.stale,
         story=getattr(args, "story", None),
         stories_only=getattr(args, "stories", False),
+        branch=getattr(args, "branch", None),
     )
     if args.ready:
         tasks = [t for t in tasks if store.is_ready(t)]
@@ -421,6 +428,8 @@ def cmd_update(args, store: Store) -> int:
         task = store.append_evidence(task, args.append_evidence)  # atomic SQL append
     if args.priority is not None:
         changes["priority"] = args.priority
+    if getattr(args, "branch", None) is not None:
+        changes["branch"] = args.branch
     if args.type is not None:
         changes["type"] = args.type
     if args.tag is not None:

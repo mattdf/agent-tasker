@@ -254,6 +254,7 @@ class Task:
     type: str = DEFAULT_TYPE
     tags: list[str] = field(default_factory=list)        # workstream / labels
     parent_id: int = 0                                   # story this belongs to (0 = none)
+    branch: str = ""                                     # git branch this work happens on
     created_at: str = ""
     updated_at: str = ""
 
@@ -274,6 +275,7 @@ class Task:
             type=row["type"],
             tags=_decode_list(row["tags"]),
             parent_id=row["parent_id"] if isinstance(row["parent_id"], int) else 0,
+            branch=row["branch"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
@@ -295,6 +297,7 @@ class Task:
             "depends_on": list(self.depends_on),
             "affects": list(self.affects),
             "parent_id": self.parent_id,
+            "branch": self.branch,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -303,7 +306,7 @@ class Task:
 # --- store -------------------------------------------------------------------
 _UPDATABLE = (
     "name", "status", "description", "blockers",
-    "depends_on", "affects", "priority", "type", "tags",
+    "depends_on", "affects", "priority", "type", "tags", "branch",
 )
 
 
@@ -341,6 +344,7 @@ class Store:
         type=DEFAULT_TYPE,
         tags: Sequence[str] = (),
         parent: str | int | None = None,
+        branch: str = "",
     ) -> Task:
         name = name.strip()
         if not name:
@@ -361,12 +365,13 @@ class Store:
                 cur = self.db.execute(
                     "INSERT INTO tasks (project, id, name, status, description, blockers,"
                     " depends_on, affects, owner, claimed_at, priority, type, tags, parent_id,"
-                    " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " branch, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         project, next_id, name, status, description,
                         json.dumps([str(b).strip() for b in blockers if str(b).strip()]),
                         json.dumps(deps), json.dumps(links),
-                        "", "", priority, type_, json.dumps(parse_tags(tags)), parent_id, now, now,
+                        "", "", priority, type_, json.dumps(parse_tags(tags)), parent_id,
+                        branch.strip(), now, now,
                     ),
                 )
                 break
@@ -422,6 +427,7 @@ class Store:
         stale_hours: float | None = None,
         story: str | int | None = None,
         stories_only: bool = False,
+        branch: str | None = None,
     ) -> list[Task]:
         query = "SELECT * FROM tasks"
         conds: list[str] = []
@@ -429,6 +435,13 @@ class Store:
         if project is not None:
             conds.append("project=?")
             args.append(project)
+        if branch is not None:
+            if "*" in branch or "_" in branch:
+                conds.append("branch LIKE ?")
+                args.append(branch.replace("*", "%"))
+            else:
+                conds.append("branch=?")
+                args.append(branch)
         if story is not None:
             conds.append("parent_id=?")
             args.append(parse_ref(str(story), project) if story else 0)

@@ -70,8 +70,8 @@ def build_server():
         affects: Optional[list[str]] = None,
         priority: str = "P2",
         type: str = "task",
-        tags: Optional[list[str]] = None,
         parent: Optional[str] = None,
+        branch: str = "",
     ) -> str:
         """Create a task in the project board.
 
@@ -96,8 +96,8 @@ def build_server():
                     prj, name,
                     description=description, status=status, evidence=evidence,
                     blockers=blockers or [], depends_on=depends_on or [], affects=affects or [],
-                    priority=priority, type=type, tags=tags or [],
                     parent=parent,
+                    branch=branch,
                 )
                 return (
                     f"added {prj}-{task.id} [{task.status}] {task.name}\n"
@@ -176,6 +176,7 @@ def build_server():
         priority: Optional[str] = None,
         type: Optional[str] = None,
         tags: Optional[list[str]] = None,
+        branch: Optional[str] = None,
     ) -> str:
         """Update task fields. List fields REPLACE when provided (pass [] to clear).
         append_evidence adds a timestamped line atomically — use it to log progress.
@@ -191,6 +192,7 @@ def build_server():
             priority: new priority P0..P3.
             type: new type: task|feature|bugfix|improvement|chore.
             tags: new tag list (replaces; [] clears).
+            branch: git branch this work happens on ('' clears).
         """
         try:
             with Store() as store:
@@ -217,6 +219,8 @@ def build_server():
                     changes["type"] = type
                 if tags is not None:
                     changes["tags"] = tags
+                if branch is not None:
+                    changes["branch"] = branch
                 updated = store.update(task, **changes) if changes else task
                 return f"updated {prj}-{updated.id}"
         except TaskError as exc:
