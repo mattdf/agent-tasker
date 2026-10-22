@@ -63,6 +63,25 @@ agenttasker board                   # TUI for humans (picks a project if none gi
 agenttasker list                    # flat table: id title status pri type blocked-by created
 ```
 
+## Stories
+
+Track a high-level feature as a story — a task that holds sub-tasks:
+
+```bash
+agenttasker story add "OAuth login" -d "Full OAuth2 flow"
+agenttasker add "Auth endpoints" --story 1
+agenttasker add "Token refresh" --story 1 --priority P1
+agenttasker story show 1            # checklist: 1/3 done, per-child status
+agenttasker ls --story 1            # just that story's sub-tasks
+agenttasker ls --stories            # only stories
+agenttasker rm 1 --force            # delete a story (children are detached, not deleted)
+```
+
+Stories are plain tasks (full fields, claimable, evidence, events) with derived
+progress (`done/total`). Single level — a sub-task can't be a story's parent.
+The TUI shows a SUB-TASKS block in the detail view; the web modal swaps the
+description pane for a sub-tasks checklist on stories.
+
 Tasks are namespaced per **project**: the git repo name (or cwd name outside a repo),
 overridable with `--project`/`-p` or `$AGENTTASKER_PROJECT`. References accept `12`
 or `ProjectName-12`.

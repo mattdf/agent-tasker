@@ -86,6 +86,11 @@ agenttasker claim REF --owner NAME [--force]     # atomic; also sets in_progress
 agenttasker release REF [--owner NAME] [--force]
 agenttasker handoff REF --to NAME [--from NAME] [--force]
 agenttasker claims [--stale [HOURS]]
+agenttasker story add "Feature" [-d DESC]  # create a story (holds sub-tasks)
+agenttasker story show REF                 # checklist: sub-tasks, done/total progress
+agenttasker add "Name" --story REF         # sub-task of a story
+agenttasker ls [--story REF] [--stories]   # filter by story / only stories
+agenttasker rm REF [--force]               # stories need --force (children detach)
 agenttasker move REF (--to STATUS | --next | --prev)
 agenttasker done REF
 agenttasker attach REF FILE [--name NAME]        # any binary; sha256-addressed on disk
@@ -103,9 +108,17 @@ Global flags (before or after the subcommand): `-p/--project NAME`, `--db PATH`.
 List-valued flags (`--dep`, `--affects`, `--blocker`) REPLACE the list when given;
 pass `--dep ''` / `--blocker ''` to clear.
 
+
+### Stories (feature tracking)
+
+A story is a task that holds sub-tasks (`--story REF`). Progress is derived
+(`done/total`). Single level — sub-tasks can't nest further. Plan multi-step
+features as a story; work the sub-tasks; the story's `show` reflects progress.
+
 ## MCP tools
 
-`add_task`, `get_task`, `list_tasks` (filters: `ready`/`blocked`/`priority`/`tag`/`stale_hours`,
+`add_task` (accepts `parent` for sub-task creation), `get_task`,
+`list_tasks` (filters: `ready`/`blocked`/`priority`/`tag`/`stale_hours`,
 `all_projects`), `update_task`, `set_status`, `delete_task`, `list_projects`,
 `claim_task`, `release_task`, `handoff_task`,
 `add_attachment` (base64 in), `list_attachments`, `read_attachment` (base64 out).
