@@ -71,6 +71,7 @@ def build_server():
         priority: str = "P2",
         type: str = "task",
         tags: Optional[list[str]] = None,
+        parent: Optional[str] = None,
     ) -> str:
         """Create a task in the project board.
 
@@ -86,6 +87,7 @@ def build_server():
             priority: P0 (urgent) .. P3 (default P2). Ready lists sort by this.
             type: task type: task|feature|bugfix|improvement|chore.
             tags: workstream/labels.
+            parent: story ref ('12' or 'Project-12') to make this a sub-task.
         """
         try:
             with Store() as store:
@@ -95,6 +97,7 @@ def build_server():
                     description=description, status=status, evidence=evidence,
                     blockers=blockers or [], depends_on=depends_on or [], affects=affects or [],
                     priority=priority, type=type, tags=tags or [],
+                    parent=parent,
                 )
                 return (
                     f"added {prj}-{task.id} [{task.status}] {task.name}\n"

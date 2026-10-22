@@ -253,6 +253,7 @@ class Task:
     priority: int = DEFAULT_PRIORITY
     type: str = DEFAULT_TYPE
     tags: list[str] = field(default_factory=list)        # workstream / labels
+    parent_id: int = 0                                   # story this belongs to (0 = none)
     created_at: str = ""
     updated_at: str = ""
 
@@ -272,6 +273,7 @@ class Task:
             priority=row["priority"] if isinstance(row["priority"], int) else DEFAULT_PRIORITY,
             type=row["type"],
             tags=_decode_list(row["tags"]),
+            parent_id=row["parent_id"] if isinstance(row["parent_id"], int) else 0,
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
@@ -292,6 +294,7 @@ class Task:
             "blockers": list(self.blockers),
             "depends_on": list(self.depends_on),
             "affects": list(self.affects),
+            "parent_id": self.parent_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -337,6 +340,7 @@ class Store:
         priority=DEFAULT_PRIORITY,
         type=DEFAULT_TYPE,
         tags: Sequence[str] = (),
+        parent: str | int | None = None,
     ) -> Task:
         name = name.strip()
         if not name:
@@ -346,6 +350,7 @@ class Store:
         type_ = normalize_type(type)
         deps = self._validate_refs(project, depends_on)
         links = self._validate_refs(project, affects)
+        parent_id = self._validate_parent(project, parent) if parent is not None else 0
         now = utcnow()
         cur = None
         for _ in range(8):  # per-project allocation; retry on concurrent writer races
@@ -355,13 +360,13 @@ class Store:
             try:
                 cur = self.db.execute(
                     "INSERT INTO tasks (project, id, name, status, description, blockers,"
-                    " depends_on, affects, owner, claimed_at, priority, type, tags,"
-                    " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " depends_on, affects, owner, claimed_at, priority, type, tags, parent_id,"
+                    " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         project, next_id, name, status, description,
                         json.dumps([str(b).strip() for b in blockers if str(b).strip()]),
                         json.dumps(deps), json.dumps(links),
-                        "", "", priority, type_, json.dumps(parse_tags(tags)), now, now,
+                        "", "", priority, type_, json.dumps(parse_tags(tags)), parent_id, now, now,
                     ),
                 )
                 break
@@ -378,6 +383,20 @@ class Store:
         task = self.get_by_id(project, next_id)
         assert task is not None
         return task
+
+    def _validate_parent(self, project: str, parent) -> int:
+        """Parent (story) must exist, be un-nested itself, and accept children."""
+        if parent is None or parent == 0 or str(parent).strip() in ("", "0"):
+            return 0
+        parent_id = parse_ref(str(parent), project)
+        story = self.get_by_id(project, parent_id)
+        if story is None:
+            raise TaskError(f"story {display_ref(project, parent_id)} does not exist")
+        if story.parent_id:
+            raise TaskError(
+                f"{display_ref(project, parent_id)} is a sub-task; stories cannot nest"
+            )
+        return parent_id
 
     def get_by_id(self, project: str, task_id: int) -> Task | None:
         row = self.db.execute(
@@ -401,6 +420,8 @@ class Store:
         priorities: Sequence[int] | None = None,
         tags: Sequence[str] | None = None,
         stale_hours: float | None = None,
+        story: str | int | None = None,
+        stories_only: bool = False,
     ) -> list[Task]:
         query = "SELECT * FROM tasks"
         conds: list[str] = []
@@ -408,6 +429,11 @@ class Store:
         if project is not None:
             conds.append("project=?")
             args.append(project)
+        if story is not None:
+            conds.append("parent_id=?")
+            args.append(parse_ref(str(story), project) if story else 0)
+        if stories_only:
+            conds.append("id IN (SELECT DISTINCT parent_id FROM tasks WHERE parent_id != 0)")
         if statuses:
             wanted = [normalize_status(s) for s in statuses]
             conds.append(f"status IN ({','.join('?' * len(wanted))})")
@@ -448,6 +474,28 @@ class Store:
         if "evidence" in changes:  # full replace -> evidence table rows
             text = changes.pop("evidence")
             updated = self.replace_evidence(task, text)
+            if not changes:
+                return updated
+            task = updated
+        if "parent" in changes:  # reparent ('' / 0 detaches)
+            parent = changes.pop("parent")
+            parent_id = self._validate_parent(task.project, parent)
+            if self.children(task):
+                raise TaskError(
+                    f"{display_ref(task.project, task.id)} has sub-tasks;"
+                    " stories cannot become sub-tasks"
+            )
+            if parent_id:
+                story = self.get_by_id(task.project, parent_id)
+                if story and story.parent_id:
+                    raise TaskError("stories cannot nest")
+            self.db.execute(
+                "UPDATE tasks SET parent_id=?, updated_at=? WHERE project=? AND id=?",
+                (parent_id, utcnow(), task.project, task.id),
+            )
+            self.db.commit()
+            updated = self.get_by_id(task.project, task.id)
+            assert updated is not None
             if not changes:
                 return updated
             task = updated
@@ -667,8 +715,20 @@ class Store:
         assert updated is not None
         return updated
 
-    def delete(self, task: Task) -> list[str]:
-        """Delete a task, its attachments, and scrub refs in other tasks."""
+    def delete(self, task: Task, *, force: bool = False) -> list[str]:
+        """Delete a task, its attachments, and scrub refs. Stories require force
+        (children are detached, not deleted)."""
+        children = self.children(task)
+        if children and not force:
+            raise TaskError(
+                f"{display_ref(task.project, task.id)} is a story with"
+                f" {len(children)} sub-task(s); use --force (children are detached)"
+            )
+        for child in children:
+            self.db.execute(
+                "UPDATE tasks SET parent_id=0 WHERE project=? AND id=?",
+                (child.project, child.id),
+            )
         self.delete_task_files(task)
         self.db.execute(
             "DELETE FROM tasks WHERE project=? AND id=?", (task.project, task.id)
@@ -747,6 +807,25 @@ class Store:
             for t in self.list_tasks(task.project)
             if task.id in t.depends_on and t.id != task.id
         ]
+
+    # --- stories -------------------------------------------------------------
+
+    def children(self, task: Task) -> list[Task]:
+        """Sub-tasks of this story, board-ordered."""
+        rows = self.db.execute(
+            "SELECT * FROM tasks WHERE project=? AND parent_id=? ORDER BY id",
+            (task.project, task.id),
+        ).fetchall()
+        tasks = [Task.from_row(r) for r in rows]
+        tasks.sort(key=lambda t: (STATUSES.index(t.status), t.priority, t.id))
+        return tasks
+
+    def story_progress(self, task: Task) -> tuple[int, int] | None:
+        """(done, total) across children; None when the task is not a story."""
+        children = self.children(task)
+        if not children:
+            return None
+        return sum(1 for c in children if c.status == DONE), len(children)
 
     # --- event log ---------------------------------------------------------
     # Status and ownership changes are appended here and shown in the
@@ -1063,6 +1142,14 @@ class Store:
                     if not dry_run:
                         self.update(task, depends_on=deps, affects=links)
 
+                old_parent = item.get("parent_id") or 0
+                new_parent = id_map.get((prj, old_parent), old_parent if old_parent == 0 else 0)
+                if new_parent != task.parent_id:
+                    if not dry_run:
+                        self.db.execute(
+                            "UPDATE tasks SET parent_id=? WHERE project=? AND id=?",
+                            (new_parent, prj, new_id),
+                        )
                 for att in item.get("attachments", []) or []:
                     if dry_run:
                         continue

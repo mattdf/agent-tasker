@@ -117,6 +117,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="workstream/tag label; repeatable, comma-separated ok",
     )
     p.add_argument(
+        "--story", metavar="REF",
+        help="make this a sub-task of the given story (id or PROJECT-id)",
+    )
+    p.add_argument(
         "--affects", action="append", metavar="REF",
         help="task whose outcome this work affects; repeatable, comma-separated ok",
     )
@@ -132,6 +136,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--priority", action="append", metavar="P0-P3",
                    help="filter by priority; repeatable, comma-separated")
     p.add_argument("--tag", action="append", metavar="TAG", help="filter by tag/workstream")
+    p.add_argument("--story", metavar="REF", help="only sub-tasks of this story")
+    p.add_argument("--stories", action="store_true", help="only stories (tasks with sub-tasks)")
     p.add_argument("--stale", nargs="?", const=24, metavar="HOURS", type=float,
                    help="only claims older than HOURS (default 24)")
     p.add_argument("--json", action="store_true", help="machine-readable output")
@@ -140,7 +146,19 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("list", parents=[common], help="flat task table: todo first, done last, priority within status")
     p.add_argument("-a", "--all-projects", action="store_true", help="list across all projects")
     p.add_argument("--json", action="store_true", help="machine-readable output")
-    p.set_defaults(func=cmd_list)
+
+    p = sub.add_parser("story", parents=[common], help="create or inspect a story")
+    sub2 = p.add_subparsers(dest="story_cmd", metavar="<action>")
+    sp = sub2.add_parser("add", parents=[common], help="create a story (a task that will hold sub-tasks)")
+    sp.add_argument("name")
+    sp.add_argument("-d", "--description", default="", help="what the feature delivers")
+    sp.add_argument("-s", "--status", default="backlog", metavar="STATUS")
+    sp.add_argument("--priority", default="P2", metavar="P0-P3")
+    sp.set_defaults(func=cmd_story_add)
+    sp = sub2.add_parser("show", parents=[common], help="checklist view of a story's sub-tasks")
+    sp.add_argument("ref", help="story task id or PROJECT-id")
+    sp.set_defaults(func=cmd_story_show)
+
 
     p = sub.add_parser("show", parents=[common], help="show full task detail")
     p.add_argument("ref", help="task id or PROJECT-id (e.g. '12' or 'demo-12')")
@@ -239,6 +257,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("rm", parents=[common], help="delete a task (scrubs refs from other tasks)")
     p.add_argument("ref", help="task id or PROJECT-id")
+    p.add_argument("--force", action="store_true",
+                   help="allow deleting a story (sub-tasks are detached, not deleted)")
     p.set_defaults(func=cmd_rm)
 
     p = sub.add_parser("projects", parents=[common], help="list projects with per-status counts")
@@ -282,6 +302,7 @@ def cmd_add(args, store: Store) -> int:
         priority=args.priority,
         type=args.type,
         tags=parse_tags(args.tag or []),
+        parent=getattr(args, "story", None),
     )
     print(f"Added {display_ref(project, task.id)} [{task.status}] {task.name}")
     return 0
@@ -299,6 +320,8 @@ def cmd_ls(args, store: Store) -> int:
         priorities=priorities,
         tags=tags,
         stale_hours=args.stale,
+        story=getattr(args, "story", None),
+        stories_only=getattr(args, "stories", False),
     )
     if args.ready:
         tasks = [t for t in tasks if store.is_ready(t)]
@@ -435,10 +458,43 @@ def cmd_done(args, store: Store) -> int:
 def cmd_rm(args, store: Store) -> int:
     project = resolve_project(args.project)
     task = store.get(project, args.ref)
-    notes = store.delete(task)
+    notes = store.delete(task, force=getattr(args, "force", False))
     print(f"Deleted {display_ref(project, task.id)} ({task.name})")
     for note in notes:
         print(f"  - {note}")
+    return 0
+
+
+def cmd_story_add(args, store: Store) -> int:
+    project = resolve_project(args.project)
+    task = store.add_task(
+        project, args.name,
+        description=args.description, status=args.status, priority=args.priority,
+    )
+    print(f"Added story {display_ref(project, task.id)} [{task.status}] {task.name}")
+    print(f"add sub-tasks with: agenttasker add \"...\" --story {task.id}")
+    return 0
+
+
+def cmd_story_show(args, store: Store) -> int:
+    project = resolve_project(args.project)
+    story = store.get(project, args.ref)
+    children = store.children(story)
+    if not children:
+        print(f"{display_ref(project, story.id)} {story.name} — no sub-tasks yet")
+        print(f"add one with: agenttasker add \"...\" --story {story.id}")
+        return 0
+    done = sum(1 for c in children if c.status == DONE)
+    print(f"{display_ref(project, story.id)}  {story.name}  —  {done}/{len(children)} done")
+    dep_map = {c.id: c.status for c in children}
+    for c in children:
+        flags = []
+        if c.status != DONE and is_blocked(c, dep_map):
+            flags.append("blocked")
+        elif is_ready(c, dep_map):
+            flags.append("ready")
+        flag = f"  [{', '.join(flags)}]" if flags else ""
+        print(f"  #{c.id:<4} {c.status:<11} {c.name}{flag}")
     return 0
 
 

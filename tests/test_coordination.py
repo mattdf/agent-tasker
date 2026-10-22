@@ -349,6 +349,53 @@ class EvidenceTableTest(unittest.TestCase):
                                      [("2026-09-12T10:00:00+00:00", "imported entry")])
 
 
+class StoryTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.tmp.name) / "tasks.db")
+        self.addCleanup(self.tmp.cleanup)
+        self.addCleanup(self.store.close)
+
+    def test_story_lifecycle(self):
+        story = self.store.add_task("p", "OAuth login", status="in_progress")
+        sub1 = self.store.add_task("p", "endpoints", parent=story.id, status="done")
+        sub2 = self.store.add_task("p", "refresh", parent=story.id)
+        self.assertEqual((sub1.parent_id, sub2.parent_id), (story.id, story.id))
+        # progress derived, not stored
+        self.assertEqual(self.store.story_progress(story), (1, 2))
+        # children board-ordered
+        self.assertEqual([c.name for c in self.store.children(story)],
+                         ["refresh", "endpoints"])
+        # delete guard + force detach
+        with self.assertRaises(TaskError):
+            self.store.delete(story)
+        self.store.delete(story, force=True)
+        fresh_sub = self.store.get("p", sub1.id)
+        self.assertEqual(fresh_sub.parent_id, 0)
+
+    def test_no_nesting_and_bad_refs(self):
+        story = self.store.add_task("p", "story")
+        sub = self.store.add_task("p", "sub", parent=story.id)
+        with self.assertRaises(TaskError):  # sub-task can't be a story's parent
+            self.store.add_task("p", "grandchild", parent=sub.id)
+        with self.assertRaises(TaskError):  # nonexistent story
+            self.store.add_task("p", "orphan", parent=999)
+        with self.assertRaises(TaskError):  # story with children can't become a sub-task
+            self.store.update(story, parent=123)
+        # detach via empty parent
+        detached = self.store.update(sub, parent="")
+        self.assertEqual(detached.parent_id, 0)
+
+    def test_story_filters(self):
+        story = self.store.add_task("p", "story")
+        self.store.add_task("p", "sub", parent=story.id)
+        self.store.add_task("p", "top-level")
+        self.assertEqual([t.name for t in self.store.list_tasks("p", story=story.id)], ["sub"])
+        self.assertEqual([t.name for t in self.store.list_tasks("p", stories_only=True)], ["story"])
+
+
+
+
 
 class TaskTypeTest(unittest.TestCase):
     def setUp(self):

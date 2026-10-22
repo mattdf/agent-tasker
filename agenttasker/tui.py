@@ -707,7 +707,11 @@ class Board:
             block("depends_on", "DEPENDS ON", dep_lines(task.depends_on, True)),
             block("affects", "AFFECTS", dep_lines(task.affects, False)),
             block(None, "BLOCKS (TASKS DEPENDING ON THIS)", dep_lines([t.id for t in dependents], True)),
-            block(None, "ATTACHMENTS", att_lines),
+            block(None, "SUB-TASKS (STORY)", [
+                (f"#{c.id} ({c.status}) {c.name}",
+                 dim if c.status == DONE else bold)
+                for c in self.store.children(task)
+            ]) if self.store.children(task) else None,
             block(None, "EVENT LOG", [
                 (f"{e['ts'][:19]}  {e['kind']:<8} {e['detail']}", dim)
                 for e in self.store.events(task, 20)

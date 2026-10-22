@@ -211,11 +211,8 @@ function human(n) { for (const u of ["B","KB","MB","GB"]) { if (n < 1024 || u ==
 
 function metaLine(t) {
   const bits = [];
+  if (t.story_progress) bits.push(`<b>${t.story_progress}</b>`);
   if (t.priority !== CFG.default_priority) bits.push(`<b class="pri${t.priority}">${priLabel(t.priority)}</b>`);
-  if (t.type !== CFG.default_type) bits.push(esc(t.type));
-  if (t.owner) bits.push(`@${esc(t.owner)}`);
-  if (t.depends_on?.length) bits.push(`deps:${t.depends_on.slice(0,3).map(i => "#"+i).join(",")}${t.depends_on.length>3?"…":""}`);
-  if (t.blockers?.length) bits.push(`ext:${t.blockers.length}`);
   if (t.blocked) bits.push(`<span class="blocked">blocked</span>`);
   else if (t.ready) bits.push(`<span class="ready">ready</span>`);
   return bits.join(" · ");
@@ -374,13 +371,21 @@ function openTask(id) {
             `<input id="f_blockers" value="${esc(t.blockers.join(", "))}" placeholder="comma-separated">`)}
     </div>
     <div class="trio">
+      ${(t.children?.length) ? `
+      <div class="pane">
+        <div class="fieldhead"><label>Sub-tasks (${t.story_progress} done)</label></div>
+        <div class="content">${t.children.map(c =>
+          `<div class="ev"><span class="evkind">#${c.id}</span>` +
+          `<span style="flex:1;${c.status === "done" ? "color:var(--dim)" : ""}">${esc(c.name)}</span>` +
+          `<span class="evts">${statusLabel(c.status)}</span></div>`).join("")}</div>
+      </div>` : `
       <div class="pane">
         <div class="fieldhead"><label>Description</label>
           <button class="mini" data-act="${EDIT.has("description") ? "editdone" : "edit"}" data-k="description">${EDIT.has("description") ? "done" : "edit"}</button></div>
         ${EDIT.has("description")
           ? `<textarea id="f_desc">${esc(t.description)}</textarea>`
           : `<div class="content">${esc(t.description) || '<span class="note">(none)</span>'}</div>`}
-      </div>
+      </div>`}
       <div class="pane">
         <div class="fieldhead"><label>Evidence</label></div>
         <div class="content">${(t.evidence_rows || []).map(e => `
@@ -506,6 +511,7 @@ function openNew() {
       <div><label class="note">Type</label><select id="n_type">${opt(CFG.types, CFG.default_type)}</select></div></div>
      <div class="frow"><label>Description</label><textarea id="n_desc"></textarea></div>
      <div class="frow"><label>Tags</label><input id="n_tags" placeholder="comma-separated"></div>
+     <div class="frow"><label>Story</label><input id="n_story" placeholder="#story id (optional)"></div>
      <div class="frow"><label>Depends on</label><input id="n_deps" placeholder="#1, #4"></div>`,
     `<button class="primary" data-act="create">Create</button>
      <button data-act="close">Cancel</button>`);
@@ -517,9 +523,9 @@ function openNew() {
         status: $("#n_status").value, priority: +$("#n_priority").value, type: $("#n_type").value,
         description: $("#n_desc").value,
         tags: $("#n_tags").value.split(",").map(s => s.trim()).filter(Boolean),
+        parent: $("#n_story").value.trim() || null,
         depends_on: $("#n_deps").value.split(",").map(s => s.trim()).filter(Boolean),
       }});
-      close(); await reload(); note(`added ${t.ref}`);
     } catch (err) { note(err.message, true); }
   });
   $("#n_name").focus();

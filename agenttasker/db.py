@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     priority    INTEGER NOT NULL DEFAULT 2,   -- 0=P0 (highest) .. 3=P3
     type        TEXT NOT NULL DEFAULT 'task', -- task|feature|bugfix|improvement|chore
     tags        TEXT NOT NULL DEFAULT '[]',   -- JSON array of strings (workstream/labels)
+    parent_id   INTEGER NOT NULL DEFAULT 0,   -- story this task belongs to (0 = none)
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
     PRIMARY KEY (project, id)
@@ -73,6 +74,7 @@ _MIGRATIONS = (
     ("tasks", "priority", "INTEGER NOT NULL DEFAULT 2"),
     ("tasks", "tags", "TEXT NOT NULL DEFAULT '[]'"),
     ("tasks", "type", "TEXT NOT NULL DEFAULT 'task'"),
+    ("tasks", "parent_id", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 _TS_MARK = re.compile(r"^\[([0-9]{4}-[0-9]{2}-[0-9]{2}T[^\]]+)\]\s?")

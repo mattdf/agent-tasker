@@ -111,15 +111,20 @@ def detail(task: Task, by_id: dict[int, Task], attachments: list | None = None,
 
     dependents = [t for t in by_id.values() if task.id in t.depends_on and t.id != task.id]
 
+    if store:
+        children = store.children(task)
+        if children:
+            done = sum(1 for c in children if c.status == DONE)
+            lines.append(f"Story progress: {done}/{len(children)} done")
+            lines.extend(f"  - #{c.id} ({c.status}) {c.name}" for c in children)
+        if task.parent_id:
+            parent = store.get_by_id(task.project, task.parent_id)
+            if parent:
+                lines.append(f"Part of story:  #{parent.id} {parent.name}")
+
     if attachments:
         lines.append("Attachments:")
         lines.extend(f"  - #{a['id']} {a['filename']} ({a['size']} bytes)" for a in attachments)
-
-    lines.append("Blocks (tasks depending on this):")
-    if dependents:
-        lines.extend(f"  - {_dep_label(t.id, by_id)}" for t in dependents)
-    else:
-        lines.append("  (none)")
 
     state = "ready" if is_ready(task, dep_map) else ("BLOCKED" if is_blocked(task, dep_map) else "ok")
     lines.append(f"State:    {state}")

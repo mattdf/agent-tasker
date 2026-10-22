@@ -56,6 +56,13 @@ def _task_payload(store: Store, task) -> dict:
     data["evidence_rows"] = store.evidence(task)
     data["last_activity"] = store.last_activity(task)
     data["active_hours"] = round(h, 2) if (h := store.active_hours(task)) is not None else None
+    children = store.children(task)
+    if children:
+        data["children"] = [
+            {k: c.to_dict()[k] for k in ("id", "name", "status", "priority", "type")}
+            for c in children
+        ]
+        data["story_progress"] = f"{sum(1 for c in children if c.status == DONE)}/{len(children)}"
     return data
 
 
@@ -207,6 +214,7 @@ def build_handler(store_path: Path | None, default_project: str | None):
                     blockers=body.get("blockers", []),
                     depends_on=body.get("depends_on", []),
                     affects=body.get("affects", []),
+                    parent=body.get("parent"),
                 )
                 self._json(200, _task_payload(store, task))
 
@@ -233,6 +241,8 @@ def build_handler(store_path: Path | None, default_project: str | None):
                     for key in ("name", "description", "evidence", "status", "priority", "type"):
                         if key in body and body[key] is not None:
                             changes[key] = body[key]
+                    if "parent" in body and body["parent"] is not None:
+                        changes["parent"] = body["parent"]
                     for key in ("blockers", "tags"):
                         if key in body and body[key] is not None:
                             changes[key] = body[key]
@@ -249,7 +259,7 @@ def build_handler(store_path: Path | None, default_project: str | None):
             project = unquote(project_name)
             with self._store() as store:
                 task = store.get(project, ref)
-                store.delete(task)
+                store.delete(task, force=True)  # web confirm dialog already gated
             self._json(200, {"deleted": display_ref(project, task.id)})
 
         def _api_attach(self, project_name: str, ref: str, body: dict):
