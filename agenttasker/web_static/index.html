@@ -189,6 +189,7 @@ button.mini { padding: 1px 8px; font-size: 11px; }
   </div>
   <button class="primary" id="newTask">+ New task</button>
   <button id="btnInstr">Instructions</button>
+  <input id="q" type="search" placeholder="search · #id · ⎇branch" style="width:190px">
   <div class="spacer"></div>
   <span class="note" id="msg"></span>
   <div class="dot" id="live" title="auto-refresh"></div>
@@ -611,7 +612,7 @@ async function openInstructions() {
     });
   } catch (err) { note(err.message, true); }
 }
-function openNew() {
+function openNew(prefillStory = "") {
   const opt = (vals, cur, labels) => vals.map(v =>
     `<option value="${v}" ${v == cur ? "selected" : ""}>${labels ? labels(v) : v}</option>`).join("");
   modal(`<b>New task</b> <span class="ref">${esc(PROJECT)}</span>`,
@@ -622,7 +623,7 @@ function openNew() {
       <div><label class="note">Type</label><select id="n_type">${opt(CFG.types, CFG.default_type)}</select></div></div>
      <div class="frow"><label>Description</label><textarea id="n_desc"></textarea></div>
      <div class="frow"><label>Tags</label><input id="n_tags" placeholder="comma-separated"></div>
-     <div class="frow"><label>Story</label><input id="n_story" placeholder="#story id (optional)"></div>
+     <div class="frow"><label>Story</label><input id="n_story" value="${esc(prefillStory)}" placeholder="#story id (optional)"></div>
      <div class="frow"><label>Branch</label><input id="n_branch" placeholder="git branch (optional)"></div>
      <div class="frow"><label>Depends on</label><input id="n_deps" placeholder="#1, #4"></div>`,
     `<button class="primary" data-act="create">Create</button>
@@ -720,6 +721,8 @@ async function boot() {
   $("#main").addEventListener("click", (e) => {
     const dep = e.target.closest(".deplink");
     if (dep) { e.preventDefault(); openTask(+dep.dataset.id); return; }
+    const sub = e.target.closest('[data-act="add-sub"]');
+    if (sub) { openNew("#" + sub.dataset.id); return; }
     const head = e.target.closest("h2");
     if (head && VIEW === "board" && head.parentElement?.dataset?.status) {
       EXPANDED = head.parentElement.dataset.status; render(); return;
