@@ -115,6 +115,8 @@ def build_handler(store_path: Path | None, default_project: str | None):
                     self._api_config()
                 elif url.path == "/api/tasks":
                     self._api_tasks(parse_qs(url.query))
+                elif url.path == "/api/instructions":
+                    self._api_instructions_get(parse_qs(url.query))
                 elif url.path.startswith("/file/"):
                     self._api_file(url.path)
                 else:
@@ -129,6 +131,8 @@ def build_handler(store_path: Path | None, default_project: str | None):
             try:
                 if url.path == "/api/tasks":
                     self._api_add(self._body())
+                elif url.path == "/api/instructions":
+                    self._api_instructions_set(self._body())
                 elif "/attachments" in url.path:
                     parts = url.path.strip("/").split("/")
                     # tasks/{project}/{id}/attachments
@@ -169,6 +173,18 @@ def build_handler(store_path: Path | None, default_project: str | None):
                 self._json(500, {"error": f"{type(exc).__name__}: {exc}"})
 
         # --- api
+        def _api_instructions_get(self, qs):
+            project = self._project((qs.get("project") or [None])[0])
+            with self._store() as store:
+                content, updated = store.get_instructions(project)
+            self._json(200, {"project": project, "content": content, "updated_at": updated})
+
+        def _api_instructions_set(self, body: dict):
+            project = self._project(body.get("project"))
+            with self._store() as store:
+                updated = store.set_instructions(project, body.get("content", ""))
+            self._json(200, {"project": project, "updated_at": updated})
+
         def _api_config(self):
             with self._store() as store:
                 projects = [

@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS evidence (
 );
 CREATE INDEX IF NOT EXISTS idx_evidence_task ON evidence(project, task_id, id);
 
+CREATE TABLE IF NOT EXISTS instructions (
+    project     TEXT PRIMARY KEY,
+    content     TEXT NOT NULL DEFAULT '',
+    updated_at  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS attachments (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     project     TEXT NOT NULL,

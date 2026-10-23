@@ -761,6 +761,46 @@ class Store:
         self.db.commit()
         return notes
 
+    # --- project instructions -------------------------------------------------
+
+    def get_instructions(self, project: str) -> tuple[str, str]:
+        """Returns (content, updated_at). Falls back to a default template."""
+        row = self.db.execute(
+            "SELECT content, updated_at FROM instructions WHERE project=?", (project,)
+        ).fetchone()
+        if row and row["content"].strip():
+            return row["content"], row["updated_at"]
+        return Store.DEFAULT_INSTRUCTIONS, ""
+
+    def set_instructions(self, project: str, content: str) -> str:
+        now = utcnow()
+        self.db.execute(
+            "INSERT INTO instructions (project, content, updated_at) VALUES (?,?,?)"
+            " ON CONFLICT(project) DO UPDATE SET content=excluded.content,"
+            " updated_at=excluded.updated_at",
+            (project, content, now),
+        )
+        self.db.commit()
+        return now
+
+    DEFAULT_INSTRUCTIONS = """\
+# Agent instructions
+
+## Evidence format
+Append evidence as single-line entries: `[finding] what you observed or did`.
+Include file paths, test results, and concrete numbers.
+
+## Working discipline
+- Read the board (`ls --ready`) before picking up work
+- Claim a task (`claim <ref> --owner <name>`) before starting
+- Append evidence as you go; don't batch it at the end
+- Declare dependencies and blockers the moment you discover them
+- Mark `done` only after verifying (tests pass, output checked)
+
+## Conventions
+(fill in project-specific conventions, coding standards, review process, etc.)
+"""
+
     def projects(self) -> dict[str, dict[str, int]]:
         counts: dict[str, dict[str, int]] = {}
         rows = self.db.execute(

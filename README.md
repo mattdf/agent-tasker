@@ -98,6 +98,22 @@ Tasks are namespaced per **project**: the git repo name (or cwd name outside a r
 overridable with `--project`/`-p` or `$AGENTTASKER_PROJECT`. References accept `12`
 or `ProjectName-12`.
 
+
+## Agent instructions
+
+Per-project instructions that agents read at session start — evidence format,
+conventions, working discipline:
+
+```bash
+agenttasker instructions                  # view (prints default template if unset)
+agenttasker instructions -e               # open in $VISUAL/$EDITOR
+agenttasker instructions --set "text"     # set directly
+agenttasker instructions --set-file FILE  # set from a file
+```
+
+Also readable/writable via the web UI (Instructions button) and MCP
+(`get_instructions` / `set_instructions`). Stored in the db, travels with
+export/import.
 ## Storage
 
 One SQLite file, WAL mode:

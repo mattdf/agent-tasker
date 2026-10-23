@@ -188,7 +188,7 @@ button.mini { padding: 1px 8px; font-size: 11px; }
     <button id="vAgents">Agents</button>
   </div>
   <button class="primary" id="newTask">+ New task</button>
-  <input id="q" placeholder="search title/description…" style="width: 220px">
+  <button id="btnInstr">Instructions</button>
   <div class="spacer"></div>
   <span class="note" id="msg"></span>
   <div class="dot" id="live" title="auto-refresh"></div>
@@ -577,6 +577,40 @@ async function save(t) {
 }
 
 /* ---------- new task ---------- */
+
+async function openInstructions() {
+  if (!PROJECT) return;
+  try {
+    const d = await api("/api/instructions?project=" + encodeURIComponent(PROJECT));
+    const editing = false;
+    modal(
+      `<b>Instructions</b> <span class="ref">${esc(PROJECT)}</span>
+       ${d.updated_at ? `<span class="note">· updated ${esc(d.updated_at.slice(0, 16).replace("T", " "))}</span>` : '<span class="note">· default template</span>'}`,
+      `<div class="pane" style="min-height:300px;flex:1">
+        <div class="fieldhead"><label>Agent instructions</label></div>
+        <div class="content" id="instr-view" style="white-space:pre-wrap;font-size:13px">${esc(d.content)}</div>
+        <textarea id="instr-edit" style="display:none;flex:1;min-height:0;width:100%;resize:none">${esc(d.content)}</textarea>
+      </div>`,
+      `<button class="mini" data-act="instr-edit-btn" id="instr-edit-btn">edit</button>
+       <button class="primary" data-act="instr-save" style="display:none">Save</button>
+       <button data-act="close">Close</button>`);
+    $("#overlay .modal").addEventListener("click", async (e) => {
+      const act = e.target.dataset?.act;
+      if (act === "instr-edit-btn") {
+        $("#instr-view").style.display = "none";
+        $("#instr-edit").style.display = "block";
+        e.target.style.display = "none";
+        $('[data-act="instr-save"]').style.display = "";
+      }
+      if (act === "instr-save") {
+        await api("/api/instructions", {method: "POST", body: {
+          project: PROJECT, content: $("#instr-edit").value}});
+        close(); note("instructions saved");
+      }
+      if (act === "close") close();
+    });
+  } catch (err) { note(err.message, true); }
+}
 function openNew() {
   const opt = (vals, cur, labels) => vals.map(v =>
     `<option value="${v}" ${v == cur ? "selected" : ""}>${labels ? labels(v) : v}</option>`).join("");
@@ -681,6 +715,8 @@ async function boot() {
   $("#vStories").onclick = () => { VIEW = "stories"; EXPANDED = null; localStorage.atx_view = VIEW; render(); };
   $("#vList").onclick = () => { VIEW = "list"; EXPANDED = null; localStorage.atx_view = VIEW; render(); };
   $("#vAgents").onclick = () => { VIEW = "agents"; EXPANDED = null; localStorage.atx_view = VIEW; render(); };
+  $("#newTask").onclick = () => PROJECT && openNew();
+  $("#btnInstr").onclick = openInstructions;
   $("#main").addEventListener("click", (e) => {
     const dep = e.target.closest(".deplink");
     if (dep) { e.preventDefault(); openTask(+dep.dataset.id); return; }

@@ -90,8 +90,8 @@ agenttasker story add "Feature" [-d DESC]  # create a story (holds sub-tasks)
 agenttasker story show REF                 # checklist: sub-tasks, done/total progress
 agenttasker add "Name" --story REF         # sub-task of a story
 agenttasker ls [--story REF] [--stories]   # filter by story / only stories
+agenttasker instructions [--set TEXT]     # view/set per-project agent instructions
 agenttasker add "Name" --branch BRANCH         # tag with a git branch
-agenttasker ls [--branch BRANCH]               # filter by branch (supports * wildcards)
 agenttasker move REF (--to STATUS | --next | --prev)
 agenttasker done REF
 agenttasker attach REF FILE [--name NAME]        # any binary; sha256-addressed on disk
@@ -113,6 +113,11 @@ pass `--dep ''` / `--blocker ''` to clear.
 ### Stories (feature tracking)
 
 A story is a task that holds sub-tasks (`--story REF`). Progress is derived
+
+### Instructions
+Read the project's agent instructions at session start (`get_instructions` /
+`agenttasker instructions`) — they define evidence format and conventions.
+Update them (`set_instructions`) when conventions evolve, not per-session.
 (`done/total`). Single level — sub-tasks can't nest further. Plan multi-step
 features as a story; work the sub-tasks; the story's `show` reflects progress.
 

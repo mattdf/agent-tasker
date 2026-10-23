@@ -410,6 +410,43 @@ def build_server():
         except TaskError as exc:
             return f"ERROR: {exc}"
 
+    @mcp.tool()
+    def get_instructions(project: Optional[str] = None) -> str:
+        """Read the per-project agent instructions (evidence format, conventions,
+        working discipline). Read these at the start of a session.
+
+        Args:
+            project: project namespace; defaults to the server's working project.
+        """
+        try:
+            with Store() as store:
+                prj = _project(project)
+                content, updated = store.get_instructions(prj)
+                header = f"# Instructions for {prj}"
+                if updated:
+                    header += f" (last updated {updated})"
+                return header + "\n\n" + content
+        except TaskError as exc:
+            return f"ERROR: {exc}"
+
+    @mcp.tool()
+    def set_instructions(content: str, project: Optional[str] = None) -> str:
+        """Replace the per-project agent instructions. Use sparingly — update
+        when conventions evolve, not per-session.
+
+        Args:
+            content: full markdown text of the instructions.
+            project: project namespace; defaults to the server's working project.
+        """
+        try:
+            with Store() as store:
+                prj = _project(project)
+                store.set_instructions(prj, content)
+                return f"instructions updated for {prj}"
+        except TaskError as exc:
+            return f"ERROR: {exc}"
+
+
     return mcp
 
 

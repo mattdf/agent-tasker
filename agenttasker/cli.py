@@ -148,6 +148,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.set_defaults(func=cmd_ls)
 
+    p = sub.add_parser("instructions", parents=[common],
+                       help="view or edit per-project agent instructions")
+    p.add_argument("-e", "--edit", action="store_true",
+                   help="open in $VISUAL/$EDITOR")
+    p.add_argument("--set", metavar="TEXT", help="set instructions to TEXT")
+    p.add_argument("--set-file", metavar="FILE", help="set instructions from a file")
+    p.set_defaults(func=cmd_instructions)
+
     p = sub.add_parser("list", parents=[common], help="flat task table: todo first, done last, priority within status")
     p.add_argument("-a", "--all-projects", action="store_true", help="list across all projects")
     p.add_argument("--json", action="store_true", help="machine-readable output")
@@ -505,6 +513,47 @@ def cmd_story_show(args, store: Store) -> int:
             flags.append("ready")
         flag = f"  [{', '.join(flags)}]" if flags else ""
         print(f"  #{c.id:<4} {c.status:<11} {c.name}{flag}")
+    return 0
+
+
+def cmd_instructions(args, store: Store) -> int:
+    project = resolve_project(args.project)
+    if args.set is not None:
+        store.set_instructions(project, args.set)
+        print(f"Instructions updated for {project}")
+        return 0
+    if args.set_file:
+        content = Path(args.set_file).expanduser().read_text(encoding="utf-8")
+        store.set_instructions(project, content)
+        print(f"Instructions updated for {project} (from {args.set_file})")
+        return 0
+    if args.edit:
+        import shlex
+        import subprocess
+        import tempfile
+
+        content, _ = store.get_instructions(project)
+        fd, path = tempfile.mkstemp(prefix="agenttasker-", suffix=".md")
+        os.close(fd)
+        Path(path).write_text(content, encoding="utf-8")
+        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
+        try:
+            curses_def = False  # not in curses here; plain CLI
+            subprocess.run(shlex.split(editor) + [path], check=False)
+        finally:
+            pass
+        new = Path(path).read_text(encoding="utf-8")
+        os.unlink(path)
+        if new.strip() != content.strip():
+            store.set_instructions(project, new)
+            print(f"Instructions updated for {project}")
+        else:
+            print("No changes")
+        return 0
+    content, updated = store.get_instructions(project)
+    print(content)
+    if updated:
+        print(f"\n--- last updated: {updated}", file=sys.stderr)
     return 0
 
 
